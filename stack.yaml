@@ -1,0 +1,73 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  EnvName:
+    Type: String
+  DbStorageGbs:
+    Type: String
+    Default: 20
+  DbBackupDays:
+    Type: String
+    Default: 7
+  DbInstanceClass:
+    Type: String
+    Default: db.t2.small
+  DbMultiAz:
+    Type: String
+    AllowedValues:
+      - true
+      - false
+    Default: false
+  DbAdminPassword:
+    Type: String
+    NoEcho: true
+
+Resources:
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupName: !Sub ${EnvName}-Db
+      DBSubnetGroupDescription: DB Subnet Group
+      SubnetIds:
+        - subnet-19bfcb7f
+        - subnet-f5c054bd
+        - subnet-4097a11b
+
+  DbAccessSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${EnvName}-DbAccess
+      GroupDescription: DB Access Security Group
+      VpcId: vpc-172f0c71
+
+  DbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${EnvName}-Db
+      GroupDescription: DB Security Group
+      VpcId: vpc-172f0c71
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref DbAccessSg
+
+  Db:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: !Ref DbStorageGbs
+      BackupRetentionPeriod: !Ref DbBackupDays
+      CopyTagsToSnapshot: true
+      DBInstanceClass: !Ref DbInstanceClass
+      DBInstanceIdentifier: !Sub ${EnvName}-Db
+      DBName: ebdb
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      Engine: mysql
+      EngineVersion: 5.7.21
+      MasterUsername: Admin
+      MasterUserPassword: !Ref DbAdminPassword
+      MultiAZ: !Ref DbMultiAz
+      StorageEncrypted: true
+      StorageType: gp2
+      VPCSecurityGroups:
+        - !Ref DbSg
+
