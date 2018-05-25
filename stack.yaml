@@ -20,6 +20,9 @@ Parameters:
   DbAdminPassword:
     Type: String
     NoEcho: true
+  WebInstanceType:
+    Type: String
+    Default: t2.micro
 
 Resources:
   DbSubnetGroup:
@@ -70,4 +73,52 @@ Resources:
       StorageType: gp2
       VPCSecurityGroups:
         - !Ref DbSg
+
+  EbApp:
+    Type: AWS::ElasticBeanstalk::Application
+    Properties:
+      ApplicationName: TestApp
+
+  EbInstanceProfileRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2008-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: ec2.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier
+
+  EbInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EbInstanceProfileRole
+
+  DevEnv:
+    Type: AWS::ElasticBeanstalk::Environment
+    Properties:
+      ApplicationName: !Ref EbApp
+      EnvironmentName: Development
+      SolutionStackName: 64bit Amazon Linux 2018.03 v2.7.0 running PHP 7.1
+      Tier:
+        Name: WebServer
+        Type: Standard
+      OptionSettings:
+        - Namespace: "aws:autoscaling:launchconfiguration"
+          OptionName: IamInstanceProfile
+          Value: !Ref EbInstanceProfile
+        - Namespace: "aws:autoscaling:launchconfiguration"
+          OptionName: EC2KeyName
+          Value: jjk3@nimbusscale.com
+        - Namespace: "aws:autoscaling:launchconfiguration"
+          OptionName: InstanceType
+          Value: !Ref WebInstanceType
+
+
+
+
 
