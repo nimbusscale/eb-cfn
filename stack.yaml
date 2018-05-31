@@ -37,44 +37,83 @@ Resources:
         - subnet-f5c054bd
         - subnet-4097a11b
 
-  DbAccessSg:
+  ProdDbAccessSg:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: !Sub ${EnvName}-DbAccess
-      GroupDescription: DB Access Security Group
+      GroupName: !Sub ${EnvName}-ProdDbAccess
+      GroupDescription: Prod DB Access Security Group
       VpcId: vpc-172f0c71
 
-  DbSg:
+  ProdDbSg:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: !Sub ${EnvName}-Db
-      GroupDescription: DB Security Group
+      GroupName: !Sub ${EnvName}-ProdDb
+      GroupDescription: Prod DB Security Group
       VpcId: vpc-172f0c71
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 3306
           ToPort: 3306
-          SourceSecurityGroupId: !Ref DbAccessSg
+          SourceSecurityGroupId: !Ref ProdDbAccessSg
 
-  Db:
+  ProdDb:
     Type: AWS::RDS::DBInstance
     Properties:
       AllocatedStorage: !Ref DbStorageGbs
       BackupRetentionPeriod: !Ref DbBackupDays
       CopyTagsToSnapshot: true
       DBInstanceClass: !Ref DbInstanceClass
-      DBInstanceIdentifier: !Sub ${EnvName}-Db
+      DBInstanceIdentifier: !Sub ${EnvName}-ProdDb
       DBName: ebdb
       DBSubnetGroupName: !Ref DbSubnetGroup
       Engine: mysql
       EngineVersion: 5.7.21
       MasterUsername: Admin
       MasterUserPassword: !Ref DbAdminPassword
-      MultiAZ: !Ref DbMultiAz
+      MultiAZ: true
       StorageEncrypted: true
       StorageType: gp2
       VPCSecurityGroups:
-        - !Ref DbSg
+        - !Ref ProdDbSg
+        
+  StageDbAccessSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${EnvName}-StageDbAccess
+      GroupDescription: Stage DB Access Security Group
+      VpcId: vpc-172f0c71
+
+  StageDbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${EnvName}-StageDb
+      GroupDescription: Stage DB Security Group
+      VpcId: vpc-172f0c71
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref StageDbAccessSg
+        
+  StageDb:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: !Ref DbStorageGbs
+      BackupRetentionPeriod: !Ref DbBackupDays
+      CopyTagsToSnapshot: true
+      DBInstanceClass: !Ref DbInstanceClass
+      DBInstanceIdentifier: !Sub ${EnvName}-StageDb
+      DBName: ebdb
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      Engine: mysql
+      EngineVersion: 5.7.21
+      MasterUsername: Admin
+      MasterUserPassword: !Ref DbAdminPassword
+      MultiAZ: false
+      StorageEncrypted: true
+      StorageType: gp2
+      VPCSecurityGroups:
+        - !Ref StageDbSg
 
   EbApp:
     Type: AWS::ElasticBeanstalk::Application
@@ -100,11 +139,11 @@ Resources:
       Roles:
         - !Ref EbInstanceProfileRole
 
-  DevEnv:
+  ProdEnv:
     Type: AWS::ElasticBeanstalk::Environment
     Properties:
       ApplicationName: !Ref EbApp
-      EnvironmentName: Development
+      EnvironmentName: Prod
       SolutionStackName: 64bit Amazon Linux 2018.03 v2.7.0 running PHP 7.1
       Tier:
         Name: WebServer
@@ -130,13 +169,60 @@ Resources:
           Value: !Ref WebInstanceType
         - Namespace: "aws:autoscaling:launchconfiguration"
           OptionName: SecurityGroups
-          Value: !Ref DbAccessSg
+          Value: !Ref ProdDbAccessSg
         - Namespace: "aws:elasticbeanstalk:application:environment"
           OptionName: RDS_HOSTNAME
-          Value: !GetAtt Db.Endpoint.Address
+          Value: !GetAtt ProdDb.Endpoint.Address
         - Namespace: "aws:elasticbeanstalk:application:environment"
           OptionName: RDS_PORT
-          Value: !GetAtt Db.Endpoint.Port
+          Value: !GetAtt ProdDb.Endpoint.Port
+        - Namespace: "aws:elasticbeanstalk:application:environment"
+          OptionName: RDS_DB_NAME
+          Value: ebdb
+        - Namespace: "aws:elasticbeanstalk:application:environment"
+          OptionName: RDS_USERNAME
+          Value: Admin
+        - Namespace: "aws:elasticbeanstalk:application:environment"
+          OptionName: RDS_PASSWORD
+          Value: !Ref DbAdminPassword
+          
+  StageEnv:
+    Type: AWS::ElasticBeanstalk::Environment
+    Properties:
+      ApplicationName: !Ref EbApp
+      EnvironmentName: Stage
+      SolutionStackName: 64bit Amazon Linux 2018.03 v2.7.0 running PHP 7.1
+      Tier:
+        Name: WebServer
+        Type: Standard
+      OptionSettings:
+        - Namespace: "aws:ec2:vpc"
+          OptionName: VPCId
+          Value: vpc-172f0c71
+        - Namespace: "aws:ec2:vpc"
+          OptionName: Subnets
+          Value: "subnet-19bfcb7f,subnet-f5c054bd"
+        - Namespace: "aws:ec2:vpc"
+          OptionName: ELBSubnets
+          Value: "subnet-19bfcb7f,subnet-f5c054bd"
+        - Namespace: "aws:autoscaling:launchconfiguration"
+          OptionName: IamInstanceProfile
+          Value: !Ref EbInstanceProfile
+        - Namespace: "aws:autoscaling:launchconfiguration"
+          OptionName: EC2KeyName
+          Value: jjk3@nimbusscale.com
+        - Namespace: "aws:autoscaling:launchconfiguration"
+          OptionName: InstanceType
+          Value: !Ref WebInstanceType
+        - Namespace: "aws:autoscaling:launchconfiguration"
+          OptionName: SecurityGroups
+          Value: !Ref StageDbAccessSg
+        - Namespace: "aws:elasticbeanstalk:application:environment"
+          OptionName: RDS_HOSTNAME
+          Value: !GetAtt StageDb.Endpoint.Address
+        - Namespace: "aws:elasticbeanstalk:application:environment"
+          OptionName: RDS_PORT
+          Value: !GetAtt StageDb.Endpoint.Port
         - Namespace: "aws:elasticbeanstalk:application:environment"
           OptionName: RDS_DB_NAME
           Value: ebdb
@@ -214,7 +300,7 @@ Resources:
                 Version: 1
               Configuration:
                 ApplicationName: !Ref EbApp
-                EnvironmentName: !Ref DevEnv
+                EnvironmentName: !Ref StageEnv
 
 
 
